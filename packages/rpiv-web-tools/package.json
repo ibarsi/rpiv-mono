@@ -1,13 +1,13 @@
 {
   "name": "@juicesharp/rpiv-web-tools",
   "version": "1.1.5",
-  "description": "Pi extension. Web search and fetch for the model, backed by the Brave Search API.",
+  "description": "Pi extension. Web search and fetch for the model, backed by SearXNG.",
   "keywords": [
     "pi-package",
     "pi-extension",
     "rpiv",
     "web-search",
-    "brave"
+    "searxng"
   ],
   "type": "module",
   "license": "MIT",

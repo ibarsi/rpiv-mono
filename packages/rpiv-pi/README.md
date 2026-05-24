@@ -182,7 +182,7 @@ Invoke via `/skill:<name>` from inside a Pi Agent session.
 | `/btw` | Ask a side question without polluting the main conversation |
 | `/languages` | Pick the UI language for rpiv-* TUI strings (Deutsch / English / Español / Français / Português / Português (Brasil) / Русский / Українська) |
 | `/todos` | Show current todo list |
-| `/web-search-config` | Set Brave Search API key |
+| `/web-search-config` | Set SearXNG base URL |
 
 ### Agents
 
@@ -217,7 +217,7 @@ Pi Agent discovers extensions via `"extensions": ["./extensions"]` and skills vi
 
 ## Configuration
 
-- **Web search** - run `/web-search-config` to set the Brave Search API key, or set the `BRAVE_SEARCH_API_KEY` environment variable
+- **Web search** - run `/web-search-config` to set the SearXNG base URL, or set the `SEARXNG_BASE_URL` environment variable
 - **Advisor** - run `/advisor` to select a reviewer model and reasoning effort
 - **Side questions** - type `/btw <question>` anytime (even mid-stream) to ask the primary model a one-off question; answer appears in a borderless bottom overlay and never enters the main conversation
 - **UI language** - run `/languages` to pick the locale for rpiv-* TUI strings, or pass `pi --locale <code>` at startup. Detection priority: flag → `~/.config/rpiv-i18n/locale.json` → `LANG` / `LC_ALL` → English. LLM-facing copy stays English by design
@@ -237,7 +237,7 @@ Pi Agent discovers extensions via `"extensions": ["./extensions"]` and skills vi
 | Warning about missing siblings on session start | Sibling plugins not installed | Run `/rpiv-setup` |
 | `/rpiv-setup` fails on a package | Network or registry issue | Check connection, retry with `pi install npm:<pkg>`, re-run `/rpiv-setup` |
 | `/rpiv-setup` says "requires interactive mode" | Running in headless mode | Install manually: `pi install npm:<pkg>` for each sibling |
-| `web_search` or `web_fetch` errors | Brave API key not configured | Run `/web-search-config` or set `BRAVE_SEARCH_API_KEY` |
+| `web_search` or `web_fetch` errors | SearXNG base URL not configured | Run `/web-search-config` or set `SEARXNG_BASE_URL` |
 | `advisor` tool not available after upgrade | Advisor model selection lost | Run `/advisor` to re-select a model |
 | Skills hang or serialize agent calls | Agent concurrency too low | Open `/agents`, raise `Settings → Max concurrency` |
 

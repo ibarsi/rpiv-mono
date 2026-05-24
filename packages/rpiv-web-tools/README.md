@@ -11,16 +11,16 @@
 [![npm version](https://img.shields.io/npm/v/@juicesharp/rpiv-web-tools.svg)](https://www.npmjs.com/package/@juicesharp/rpiv-web-tools)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Let the model search the web and read pages. `rpiv-web-tools` adds `web_search` and `web_fetch` tools to [Pi Agent](https://github.com/badlogic/pi-mono), backed by the Brave Search API, plus `/web-search-config` for interactive API-key setup.
+Let the model search the web and read pages. `rpiv-web-tools` adds `web_search` and `web_fetch` tools to [Pi Agent](https://github.com/badlogic/pi-mono), backed by a SearXNG instance, plus `/web-search-config` for interactive base-URL setup.
 
-![Brave Search API key prompt](https://raw.githubusercontent.com/juicesharp/rpiv-mono/main/packages/rpiv-web-tools/docs/config.jpg)
+![SearXNG base URL prompt](https://raw.githubusercontent.com/juicesharp/rpiv-mono/main/packages/rpiv-web-tools/docs/config.jpg)
 
 ## Features
 
-- **Brave-backed search** - 1–10 ranked results per query with title and snippet.
+- **SearXNG-backed search** - 1–10 ranked results per query with title and snippet.
 - **Read any URL** - fetch http/https pages, strip HTML to text, or get the raw HTML with `raw: true`.
 - **Large-page spillover** - oversized responses truncate inline and spill the full body to a temp file the model can read on demand.
-- **Interactive setup** - `/web-search-config` writes the key to `~/.config/rpiv-web-tools/config.json` (chmod 0600); env var `BRAVE_SEARCH_API_KEY` also works.
+- **Interactive setup** - `/web-search-config` writes the SearXNG base URL to `~/.config/rpiv-web-tools/config.json` (chmod 0600); env var `SEARXNG_BASE_URL` also works.
 
 ## Install
 
@@ -32,7 +32,7 @@ Then restart your Pi session.
 
 ## Tools
 
-- **`web_search`** - query the Brave Search API and return titled snippets.
+- **`web_search`** - query a SearXNG instance and return titled snippets.
   1–10 results per call.
 - **`web_fetch`** - fetch an http/https URL, strip HTML to text (or return raw
   HTML with `raw: true`), truncate large responses with a temp-file spill for
@@ -54,14 +54,14 @@ Returns:
   content: [{ type: "text", text: string }], // markdown list of "**title**\n url\n snippet"
   details: {
     query: string,
-    backend: "brave",
+    backend: "searxng",
     resultCount: number,
     results?: Array<{ title: string, url: string, snippet: string }>,
   }
 }
 ```
 
-Throws when `BRAVE_SEARCH_API_KEY` is unset or the Brave API returns a non-2xx response.
+Throws when `SEARXNG_BASE_URL` is unset or the SearXNG instance returns a non-2xx response.
 
 ### Schema - `web_fetch`
 
@@ -92,16 +92,30 @@ Throws on invalid URL, non-http(s) protocol, non-2xx response, or `image/` / `vi
 
 ## Commands
 
-- **`/web-search-config`** - set the Brave API key interactively. Writes to
+- **`/web-search-config`** - set the SearXNG base URL interactively. Writes to
   `~/.config/rpiv-web-tools/config.json` (chmod 0600). Pass `--show` to see
-  the current (masked) key and env var status.
+  the current configured URL and env var status.
 
-## API key resolution
+For your local SearXNG instance, use:
+
+```bash
+export SEARXNG_BASE_URL="http://192.168.0.39:8888"
+```
+
+Or run `/web-search-config` inside Pi and enter:
+
+```text
+http://192.168.0.39:8888
+```
+
+SearXNG must allow JSON output (`format=json`) for `web_search` to work.
+
+## SearXNG base URL resolution
 
 First match wins:
 
-1. `BRAVE_SEARCH_API_KEY` environment variable
-2. `apiKey` field in `~/.config/rpiv-web-tools/config.json`
+1. `SEARXNG_BASE_URL` environment variable
+2. `searxngBaseUrl` field in `~/.config/rpiv-web-tools/config.json`
 
 ## License
 

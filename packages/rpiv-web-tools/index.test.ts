@@ -18,7 +18,7 @@ function writeConfig(contents: unknown) {
 }
 
 beforeEach(() => {
-	delete process.env.BRAVE_SEARCH_API_KEY;
+	delete process.env.SEARXNG_BASE_URL;
 	rmSync(CONFIG_PATH, { force: true });
 });
 
@@ -43,17 +43,17 @@ describe("registerWebTools — registration", () => {
 	});
 });
 
-describe("web_search.execute — env-key precedence + happy path", () => {
-	it("uses env key over config key", async () => {
-		process.env.BRAVE_SEARCH_API_KEY = "env-key";
-		writeConfig({ apiKey: "config-key" });
+describe("web_search.execute — env-url precedence + happy path", () => {
+	it("uses env URL over config URL", async () => {
+		process.env.SEARXNG_BASE_URL = "http://env-searxng.test/";
+		writeConfig({ searxngBaseUrl: "http://config-searxng.test" });
 		const stub = stubFetch([
 			{
-				match: (u) => u.includes("api.search.brave.com"),
+				match: (u) => u.includes("env-searxng.test/search"),
 				response: () =>
 					new Response(
 						JSON.stringify({
-							web: { results: [{ title: "T", url: "https://x", description: "snip" }] },
+							results: [{ title: "T", url: "https://x", content: "snip" }],
 						}),
 						{ status: 200 },
 					),
@@ -64,24 +64,26 @@ describe("web_search.execute — env-key precedence + happy path", () => {
 			.get("web_search")
 			?.execute?.("tc", { query: "hello", max_results: 3 }, undefined as never, undefined as never, createMockCtx());
 		expect(r?.content[0]).toMatchObject({ type: "text" });
-		const headers = stub.calls[0].init?.headers as Record<string, string>;
-		expect(headers["X-Subscription-Token"]).toBe("env-key");
+		const url = new URL(stub.calls[0].url);
+		expect(url.origin).toBe("http://env-searxng.test");
+		expect(url.searchParams.get("q")).toBe("hello");
+		expect(url.searchParams.get("format")).toBe("json");
+		expect(url.searchParams.get("categories")).toBe("general");
 	});
 
-	it("falls back to config key when env unset", async () => {
-		writeConfig({ apiKey: "config-key" });
+	it("falls back to config URL when env unset", async () => {
+		writeConfig({ searxngBaseUrl: "http://config-searxng.test/" });
 		const stub = stubFetch([
 			{
-				match: (u) => u.includes("api.search.brave.com"),
-				response: () => new Response(JSON.stringify({ web: { results: [] } }), { status: 200 }),
+				match: (u) => u.includes("config-searxng.test/search"),
+				response: () => new Response(JSON.stringify({ results: [] }), { status: 200 }),
 			},
 		]);
 		const { captured } = registerAndCapture();
 		await captured.tools
 			.get("web_search")
 			?.execute?.("tc", { query: "x" }, undefined as never, undefined as never, createMockCtx());
-		const headers = stub.calls[0].init?.headers as Record<string, string>;
-		expect(headers["X-Subscription-Token"]).toBe("config-key");
+		expect(new URL(stub.calls[0].url).origin).toBe("http://config-searxng.test");
 	});
 
 	it("throws when neither env nor config set", async () => {
@@ -90,30 +92,40 @@ describe("web_search.execute — env-key precedence + happy path", () => {
 			captured.tools
 				.get("web_search")
 				?.execute?.("tc", { query: "x" }, undefined as never, undefined as never, createMockCtx()),
-		).rejects.toThrow(/BRAVE_SEARCH_API_KEY is not set/);
+		).rejects.toThrow(/SEARXNG_BASE_URL is not set/);
 	});
 
 	it("clamps max_results to [1,10]", async () => {
-		process.env.BRAVE_SEARCH_API_KEY = "k";
+		process.env.SEARXNG_BASE_URL = "http://searxng.test";
 		const stub = stubFetch([
 			{
-				match: (u) => u.includes("api.search.brave.com"),
-				response: () => new Response(JSON.stringify({ web: { results: [] } }), { status: 200 }),
+				match: (u) => u.includes("searxng.test/search"),
+				response: () =>
+					new Response(
+						JSON.stringify({
+							results: Array.from({ length: 12 }, (_, i) => ({
+								title: `T${i}`,
+								url: `https://x/${i}`,
+								content: `snip ${i}`,
+							})),
+						}),
+						{ status: 200 },
+					),
 			},
 		]);
 		const { captured } = registerAndCapture();
-		await captured.tools
+		const r = await captured.tools
 			.get("web_search")
 			?.execute?.("tc", { query: "x", max_results: 99 }, undefined as never, undefined as never, createMockCtx());
-		const url = stub.calls[0].url;
-		expect(new URL(url).searchParams.get("count")).toBe("10");
+		expect(stub.calls[0].url).toContain("/search");
+		expect((r?.details as { resultCount: number }).resultCount).toBe(10);
 	});
 
-	it("wraps non-2xx as 'Brave Search API error (status): body'", async () => {
-		process.env.BRAVE_SEARCH_API_KEY = "k";
+	it("wraps non-2xx as 'SearXNG API error (status): body'", async () => {
+		process.env.SEARXNG_BASE_URL = "http://searxng.test";
 		stubFetch([
 			{
-				match: (u) => u.includes("api.search.brave.com"),
+				match: (u) => u.includes("searxng.test/search"),
 				response: () => new Response("rate limit", { status: 429 }),
 			},
 		]);
@@ -122,15 +134,15 @@ describe("web_search.execute — env-key precedence + happy path", () => {
 			captured.tools
 				.get("web_search")
 				?.execute?.("tc", { query: "x" }, undefined as never, undefined as never, createMockCtx()),
-		).rejects.toThrow(/Brave Search API error \(429\)/);
+		).rejects.toThrow(/SearXNG API error \(429\)/);
 	});
 
-	it("returns no-results envelope when Brave yields []", async () => {
-		process.env.BRAVE_SEARCH_API_KEY = "k";
+	it("returns no-results envelope when SearXNG yields []", async () => {
+		process.env.SEARXNG_BASE_URL = "http://searxng.test";
 		stubFetch([
 			{
-				match: (u) => u.includes("api.search.brave.com"),
-				response: () => new Response(JSON.stringify({ web: { results: [] } }), { status: 200 }),
+				match: (u) => u.includes("searxng.test/search"),
+				response: () => new Response(JSON.stringify({ results: [] }), { status: 200 }),
 			},
 		]);
 		const { captured } = registerAndCapture();
@@ -275,15 +287,15 @@ describe("/web-search-config command", () => {
 		expect(ctx.ui.notify).toHaveBeenCalledWith(expect.stringContaining("interactive"), "error");
 	});
 
-	it("--show masks both env + config keys", async () => {
-		process.env.BRAVE_SEARCH_API_KEY = "sk-live-abcdefghijklmnop";
-		writeConfig({ apiKey: "sk-cfg-abcdefghijklmnop" });
+	it("--show includes both env + config URLs", async () => {
+		process.env.SEARXNG_BASE_URL = "http://192.168.0.39:8888/";
+		writeConfig({ searxngBaseUrl: "http://config-searxng.test" });
 		const { captured } = registerAndCapture();
 		const ctx = createMockCtx({ hasUI: true });
 		await captured.commands.get("web-search-config")?.handler("--show", ctx as never);
 		const msg = (ctx.ui.notify as ReturnType<typeof vi.fn>).mock.calls[0][0];
-		expect(msg).toContain("sk-l...mnop");
-		expect(msg).toContain("sk-c...mnop");
+		expect(msg).toContain("http://192.168.0.39:8888/");
+		expect(msg).toContain("http://config-searxng.test");
 	});
 
 	it("--show shows '(not set)' when nothing configured", async () => {
@@ -295,32 +307,32 @@ describe("/web-search-config command", () => {
 	});
 
 	it("interactive save writes JSON and preserves extra fields", async () => {
-		writeConfig({ apiKey: "old", otherField: "keep" });
+		writeConfig({ searxngBaseUrl: "http://old.test", otherField: "keep" });
 		const { captured } = registerAndCapture();
 		const ctx = createMockCtx({ hasUI: true });
-		(ctx.ui.input as ReturnType<typeof vi.fn>).mockResolvedValueOnce("  new-key  ");
+		(ctx.ui.input as ReturnType<typeof vi.fn>).mockResolvedValueOnce("  http://192.168.0.39:8888/  ");
 		await captured.commands.get("web-search-config")?.handler("", ctx as never);
 		const saved = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
-		expect(saved).toEqual({ apiKey: "new-key", otherField: "keep" });
+		expect(saved).toEqual({ searxngBaseUrl: "http://192.168.0.39:8888", otherField: "keep" });
 	});
 
 	it("interactive empty/whitespace input preserves existing config", async () => {
-		writeConfig({ apiKey: "existing" });
+		writeConfig({ searxngBaseUrl: "http://existing.test" });
 		const { captured } = registerAndCapture();
 		const ctx = createMockCtx({ hasUI: true });
 		(ctx.ui.input as ReturnType<typeof vi.fn>).mockResolvedValueOnce("   ");
 		await captured.commands.get("web-search-config")?.handler("", ctx as never);
 		const saved = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
-		expect(saved.apiKey).toBe("existing");
+		expect(saved.searxngBaseUrl).toBe("http://existing.test");
 	});
 
 	it("undefined input (Esc) leaves config untouched", async () => {
-		writeConfig({ apiKey: "existing" });
+		writeConfig({ searxngBaseUrl: "http://existing.test" });
 		const { captured } = registerAndCapture();
 		const ctx = createMockCtx({ hasUI: true });
 		(ctx.ui.input as ReturnType<typeof vi.fn>).mockResolvedValueOnce(undefined);
 		await captured.commands.get("web-search-config")?.handler("", ctx as never);
 		const saved = JSON.parse(readFileSync(CONFIG_PATH, "utf-8"));
-		expect(saved.apiKey).toBe("existing");
+		expect(saved.searxngBaseUrl).toBe("http://existing.test");
 	});
 });

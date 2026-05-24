@@ -18,7 +18,7 @@ Monorepo for Pi CLI extensions in the `@juicesharp/rpiv-*` family. Lockstep vers
 | [`@juicesharp/rpiv-i18n`](packages/rpiv-i18n) | i18n SDK for Pi extensions — `/languages` picker + `--locale` flag + `registerStrings`/`scope`/`tr` API; 8 languages OOTB |
 | [`@juicesharp/rpiv-todo`](packages/rpiv-todo) | `todo` tool + `/todos` overlay — Claude-Code-parity task tracking |
 | [`@juicesharp/rpiv-warp`](packages/rpiv-warp) | Native [Warp](https://warp.dev) terminal toasts via `OSC 777` for Pi lifecycle events — opt-in, not auto-installed by `/rpiv-setup` |
-| [`@juicesharp/rpiv-web-tools`](packages/rpiv-web-tools) | `web_search` + `web_fetch` tools — backed by Brave Search API |
+| [`@juicesharp/rpiv-web-tools`](packages/rpiv-web-tools) | `web_search` + `web_fetch` tools — backed by SearXNG |
 
 Each package is published independently to npm and installable by name:
 

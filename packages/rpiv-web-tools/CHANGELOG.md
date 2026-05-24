@@ -7,6 +7,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- `web_search` now queries a configured SearXNG instance instead of the Brave Search API.
+- `/web-search-config` now stores `searxngBaseUrl`; `SEARXNG_BASE_URL` replaces `BRAVE_SEARCH_API_KEY` as the environment override.
+
 ## [1.1.5] - 2026-05-05
 
 ### Documentation

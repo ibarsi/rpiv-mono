@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-label="rpiv-web-tools — Brave-backed web search and fetch for Pi Agent" preserveAspectRatio="xMidYMid meet">
-  <title>rpiv-web-tools — Brave-backed web search and fetch for Pi Agent</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" role="img" aria-label="rpiv-web-tools — SearXNG-backed web search and fetch for Pi Agent" preserveAspectRatio="xMidYMid meet">
+  <title>rpiv-web-tools — SearXNG-backed web search and fetch for Pi Agent</title>
   <defs>
     <style>
       .mono { font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', ui-monospace, Menlo, Consolas, monospace; }
@@ -51,14 +51,14 @@
     <text class="mono" x="120" y="548" font-size="22"><tspan class="accent" font-weight="700">03</tspan>  <tspan class="ink" font-weight="700">EventSource: a tour through the standard</tspan></text>
     <text class="mono mint" x="120" y="580" font-size="18">    https://html.spec.whatwg.org/multipage/server-sent-events.html</text>
 
-    <text class="mono" x="120" y="630" font-size="14" letter-spacing="2"><tspan class="mint" font-weight="700">[200 OK]</tspan>  <tspan class="muted">3 RESULTS &#183; BRAVE SEARCH &#183; 0.42s</tspan></text>
+    <text class="mono" x="120" y="630" font-size="14" letter-spacing="2"><tspan class="mint" font-weight="700">[200 OK]</tspan>  <tspan class="muted">3 RESULTS &#183; SEARXNG &#183; 0.42s</tspan></text>
 
     <rect x="64" y="708" width="1152" height="36" fill="#16120E"/>
     <line x1="64" y1="708" x2="1216" y2="708" stroke="#2A2620"/>
     <text class="mono" font-size="14" y="731" letter-spacing="1">
       <tspan x="92" class="accent" font-weight="700">&#9612; rpiv-web-tools</tspan>
       <tspan dx="14" class="dim">&#9474;</tspan>
-      <tspan dx="14" class="mint">brave search</tspan>
+      <tspan dx="14" class="mint">searxng search</tspan>
       <tspan dx="14" class="dim">&#9474;</tspan>
       <tspan dx="14" class="muted">pi 0.9.4</tspan>
       <tspan dx="14" class="dim">&#9474;</tspan>

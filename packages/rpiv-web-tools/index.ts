@@ -1,16 +1,13 @@
 /**
  * rpiv-pi web-tools extension
  *
- * Provides `web_search` and `web_fetch` tools backed by the Brave Search API.
- * Based on the user-local reference implementation at
- * ~/.pi/agent/extensions/web-search/index.ts (Tavily/Serper backends stripped,
- * Brave kept as default).
+ * Provides `web_search` and `web_fetch` tools backed by a SearXNG instance.
  *
- * API key resolution precedence (first wins):
- *   1. BRAVE_SEARCH_API_KEY environment variable
- *   2. apiKey field in ~/.config/rpiv-pi/web-tools.json
+ * SearXNG base URL resolution precedence (first wins):
+ *   1. SEARXNG_BASE_URL environment variable
+ *   2. searxngBaseUrl field in ~/.config/rpiv-web-tools/config.json
  *
- * Use the /web-search-config slash command to set the key interactively.
+ * Use the /web-search-config slash command to set the base URL interactively.
  */
 
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -33,10 +30,11 @@ import { Type } from "typebox";
 // ---------------------------------------------------------------------------
 
 interface WebToolsConfig {
-	apiKey?: string;
+	searxngBaseUrl?: string;
 }
 
 const CONFIG_PATH = join(homedir(), ".config", "rpiv-web-tools", "config.json");
+const DEFAULT_SEARXNG_BASE_URL = "http://192.168.0.39:8888";
 
 function loadConfig(): WebToolsConfig {
 	if (!existsSync(CONFIG_PATH)) return {};
@@ -57,16 +55,34 @@ function saveConfig(config: WebToolsConfig): void {
 	}
 }
 
-function resolveApiKey(): string | undefined {
-	const envKey = process.env.BRAVE_SEARCH_API_KEY;
-	if (envKey?.trim()) return envKey.trim();
+function normalizeBaseUrl(value: string): string {
+	return value.trim().replace(/\/+$/, "");
+}
+
+function validateSearxngBaseUrl(value: string): string {
+	const normalized = normalizeBaseUrl(value);
+	let parsed: URL;
+	try {
+		parsed = new URL(normalized);
+	} catch {
+		throw new Error(`Invalid SearXNG base URL: ${value}`);
+	}
+	if (!["http:", "https:"].includes(parsed.protocol)) {
+		throw new Error(`Unsupported SearXNG URL protocol: ${parsed.protocol}. Only http and https are supported.`);
+	}
+	return normalized;
+}
+
+function resolveSearxngBaseUrl(): string | undefined {
+	const envUrl = process.env.SEARXNG_BASE_URL;
+	if (envUrl?.trim()) return validateSearxngBaseUrl(envUrl);
 	const config = loadConfig();
-	if (config.apiKey?.trim()) return config.apiKey.trim();
+	if (config.searxngBaseUrl?.trim()) return validateSearxngBaseUrl(config.searxngBaseUrl);
 	return undefined;
 }
 
 // ---------------------------------------------------------------------------
-// Brave Search API client
+// SearXNG Search API client
 // ---------------------------------------------------------------------------
 
 interface SearchResult {
@@ -80,39 +96,42 @@ interface SearchResponse {
 	query: string;
 }
 
-async function searchBrave(query: string, maxResults: number, signal?: AbortSignal): Promise<SearchResponse> {
-	const apiKey = resolveApiKey();
-	if (!apiKey) {
-		throw new Error("BRAVE_SEARCH_API_KEY is not set. Run /web-search-config to configure, or export the env var.");
+async function searchSearxng(query: string, maxResults: number, signal?: AbortSignal): Promise<SearchResponse> {
+	const baseUrl = resolveSearxngBaseUrl();
+	if (!baseUrl) {
+		throw new Error("SEARXNG_BASE_URL is not set. Run /web-search-config to configure, or export the env var.");
 	}
 
-	const url = new URL("https://api.search.brave.com/res/v1/web/search");
+	const url = new URL("/search", baseUrl);
 	url.searchParams.set("q", query);
-	url.searchParams.set("count", String(maxResults));
+	url.searchParams.set("format", "json");
+	url.searchParams.set("categories", "general");
 
 	const res = await fetch(url.toString(), {
 		method: "GET",
 		headers: {
 			Accept: "application/json",
-			"Accept-Encoding": "gzip",
-			"X-Subscription-Token": apiKey,
+			"User-Agent": "rpiv-web-tools/1.0",
 		},
 		signal,
 	});
 
 	if (!res.ok) {
 		const text = await res.text();
-		throw new Error(`Brave Search API error (${res.status}): ${text}`);
+		throw new Error(`SearXNG API error (${res.status}): ${text}`);
 	}
 
 	const data = (await res.json()) as {
-		web?: { results?: Array<{ title?: string; url?: string; description?: string }> };
+		results?: Array<{ title?: string; url?: string; content?: string }>;
 	};
-	const results: SearchResult[] = (data.web?.results ?? []).map((r) => ({
-		title: r.title ?? "",
-		url: r.url ?? "",
-		snippet: r.description ?? "",
-	}));
+	const results: SearchResult[] = (data.results ?? [])
+		.filter((r) => r.url)
+		.slice(0, maxResults)
+		.map((r) => ({
+			title: r.title ?? "",
+			url: r.url ?? "",
+			snippet: r.content ?? "",
+		}));
 
 	return { results, query };
 }
@@ -165,14 +184,13 @@ export default function (pi: ExtensionAPI) {
 		name: "web_search",
 		label: "Web Search",
 		description:
-			"Search the web for information via the Brave Search API. Returns a list of results with titles, URLs, and snippets. Use when you need current information not in your training data.",
-		promptSnippet: "Search the web for up-to-date information via Brave",
+			"Search the web for information via a configured SearXNG instance. Returns a list of results with titles, URLs, and snippets. Use when you need current information not in your training data.",
+		promptSnippet: "Search the web for up-to-date information via SearXNG",
 		promptGuidelines: [
 			"Use web_search for information beyond your training data — recent events, current library versions, live API documentation.",
 			'Use the current year from "Current date:" in your context when searching for recent information or documentation.',
 			'After answering using search results, include a "Sources:" section listing relevant URLs as markdown hyperlinks: [Title](URL). Never skip this.',
-			"Domain filtering is supported to include or block specific websites.",
-			"If BRAVE_SEARCH_API_KEY is not set, ask the user to run /web-search-config before proceeding.",
+			"If SEARXNG_BASE_URL is not set, ask the user to run /web-search-config before proceeding.",
 		],
 		parameters: Type.Object({
 			query: Type.String({
@@ -192,11 +210,11 @@ export default function (pi: ExtensionAPI) {
 			const maxResults = Math.min(Math.max(params.max_results ?? 5, 1), 10);
 
 			onUpdate?.({
-				content: [{ type: "text", text: `Searching Brave for: "${params.query}"...` }],
-				details: { query: params.query, backend: "brave", resultCount: 0 },
+				content: [{ type: "text", text: `Searching SearXNG for: "${params.query}"...` }],
+				details: { query: params.query, backend: "searxng", resultCount: 0 },
 			});
 
-			const response = await searchBrave(params.query, maxResults, signal);
+			const response = await searchSearxng(params.query, maxResults, signal);
 
 			if (response.results.length === 0) {
 				return {
@@ -206,7 +224,7 @@ export default function (pi: ExtensionAPI) {
 							text: `No results found for "${params.query}".`,
 						},
 					],
-					details: { query: params.query, backend: "brave", resultCount: 0 },
+					details: { query: params.query, backend: "searxng", resultCount: 0 },
 				};
 			}
 
@@ -220,7 +238,7 @@ export default function (pi: ExtensionAPI) {
 				content: [{ type: "text", text: text.trimEnd() }],
 				details: {
 					query: params.query,
-					backend: "brave",
+					backend: "searxng",
 					resultCount: response.results.length,
 					results: response.results,
 				},
@@ -418,7 +436,7 @@ export default function (pi: ExtensionAPI) {
 	// =========================================================================
 
 	pi.registerCommand("web-search-config", {
-		description: "Configure the Brave Search API key used by web_search/web_fetch",
+		description: "Configure the SearXNG base URL used by web_search",
 		handler: async (args, ctx) => {
 			if (!ctx.hasUI) {
 				ctx.ui?.notify?.("/web-search-config requires interactive mode", "error");
@@ -429,20 +447,18 @@ export default function (pi: ExtensionAPI) {
 			const showMode = typeof args === "string" && args.includes("--show");
 
 			if (showMode) {
-				const masked = current.apiKey ? `${current.apiKey.slice(0, 4)}...${current.apiKey.slice(-4)}` : "(not set)";
-				const envMasked = process.env.BRAVE_SEARCH_API_KEY
-					? `${process.env.BRAVE_SEARCH_API_KEY.slice(0, 4)}...${process.env.BRAVE_SEARCH_API_KEY.slice(-4)}`
-					: "(not set)";
+				const configUrl = current.searxngBaseUrl ?? "(not set)";
+				const envUrl = process.env.SEARXNG_BASE_URL ?? "(not set)";
 				ctx.ui.notify(
-					`Web search config:\n  config file: ${CONFIG_PATH}\n  apiKey: ${masked}\n  BRAVE_SEARCH_API_KEY env: ${envMasked}`,
+					`Web search config:\n  config file: ${CONFIG_PATH}\n  searxngBaseUrl: ${configUrl}\n  SEARXNG_BASE_URL env: ${envUrl}`,
 					"info",
 				);
 				return;
 			}
 
 			const input = await ctx.ui.input(
-				"Brave Search API key",
-				current.apiKey ? "(leave empty to keep existing)" : "sk-...",
+				"SearXNG base URL",
+				current.searxngBaseUrl ? "(leave empty to keep existing)" : DEFAULT_SEARXNG_BASE_URL,
 			);
 
 			if (input === undefined || input === null) {
@@ -456,8 +472,16 @@ export default function (pi: ExtensionAPI) {
 				return;
 			}
 
-			saveConfig({ ...current, apiKey: trimmed });
-			ctx.ui.notify(`Saved Brave API key to ${CONFIG_PATH}`, "info");
+			let searxngBaseUrl: string;
+			try {
+				searxngBaseUrl = validateSearxngBaseUrl(trimmed);
+			} catch (err) {
+				ctx.ui.notify(err instanceof Error ? err.message : "Invalid SearXNG base URL", "error");
+				return;
+			}
+
+			saveConfig({ ...current, searxngBaseUrl });
+			ctx.ui.notify(`Saved SearXNG base URL to ${CONFIG_PATH}`, "info");
 		},
 	});
 }
